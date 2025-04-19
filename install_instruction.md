@@ -2,6 +2,8 @@
 Install the required Python libraries:
 ```bash
 pip install yahooquery yfinance pandas numpy ta tabulate prompt_toolkit matplotlib openpyxl
+or
+pip3 install yahooquery yfinance pandas numpy ta tabulate prompt_toolkit matplotlib openpyxl
 ```
 ### Code Structure
 - **Imports**: Libraries for data fetching (`yahooquery`, `yfinance`), technical analysis (`ta`), data handling (`pandas`, `numpy`), user interface (`prompt_toolkit`, `tabulate`), plotting (`matplotlib`), and configuration (`configparser`).
