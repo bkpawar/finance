@@ -76,18 +76,21 @@ class StockAnalyzer:
                     'returnOnCapitalEmployed': info.get('returnOnAssets', 0.05)  # Approximation
                 }
             self.calculation_details.append(f"Fetched fundamental data for {self.ticker}")
-            time.sleep(1)  # Delay to avoid API rate limits
+            # Implement rate-limiting mechanism to avoid API rate limits
+            if hasattr(self, '_last_api_call') and time.time() - self._last_api_call < 1:
+                time.sleep(1 - (time.time() - self._last_api_call))
+            self._last_api_call = time.time()
         except Exception as e:
             logger.error(f"Error fetching fundamental data for {self.ticker}: {e}")
             self.fundamental_data = {
-                'debtToEquity': 1.0,
-                'returnOnEquity': 0.15,
-                'dividendYield': 0.01,
-                'trailingPE': 20.0,
-                'priceToBook': 2.0,
-                'marketCap': 1e9,
-                'netMargin': 0.1,
-                'returnOnCapitalEmployed': 0.05
+                'debtToEquity': float(config['DEFAULT'].get('default_debtToEquity', 1.0)),
+                'returnOnEquity': float(config['DEFAULT'].get('default_returnOnEquity', 0.15)),
+                'dividendYield': float(config['DEFAULT'].get('default_dividendYield', 0.01)),
+                'trailingPE': float(config['DEFAULT'].get('default_trailingPE', 20.0)),
+                'priceToBook': float(config['DEFAULT'].get('default_priceToBook', 2.0)),
+                'marketCap': float(config['DEFAULT'].get('default_marketCap', 1e9)),
+                'netMargin': float(config['DEFAULT'].get('default_netMargin', 0.1)),
+                'returnOnCapitalEmployed': float(config['DEFAULT'].get('default_returnOnCapitalEmployed', 0.05))
             }
             self.calculation_details.append(f"Error fetching fundamental data for {self.ticker}: {str(e)}. Using defaults.")
 
@@ -258,6 +261,13 @@ class StockAnalyzer:
         Returns:
             tuple: (scores list, final_rating)
         """
+        if hasattr(self, '_cached_scores') and hasattr(self, '_cached_final_rating'):
+            return self._cached_scores, self._cached_final_rating
+        """
+        Calculate scores for all parameters and compute Final Rating.
+        Returns:
+            tuple: (scores list, final_rating)
+        """
         scores = []
 
         # 1. Promoter Holding
@@ -285,7 +295,7 @@ class StockAnalyzer:
         # 4. Return on Equity
         roe = self.fundamental_data.get('returnOnEquity', 0.15)
         if isinstance(roe, (int, float)):
-            roe_score = min(100, roe * 500)  # Convert to percentage and scale
+            roe_score = min(100, roe * 500)
         else:
             roe_score = 50.0
             self.calculation_details.append(f"Invalid RoE: {roe}. Using default score: 50")
@@ -307,7 +317,7 @@ class StockAnalyzer:
         # 7. Dividend Yield
         div_yield = self.fundamental_data.get('dividendYield', 0.01)
         if isinstance(div_yield, (int, float)):
-            div_yield_score = min(100, div_yield * 5000)  # Convert to percentage and scale
+            div_yield_score = min(100, div_yield * 5000)
         else:
             div_yield_score = 50.0
             self.calculation_details.append(f"Invalid Dividend Yield: {div_yield}. Using default score: 50")
@@ -317,11 +327,10 @@ class StockAnalyzer:
         # 8. Economic Moat
         moat = self.user_inputs.get('moat')
         if moat is None:
-            # Calculate moat if not provided
             net_margin = self.fundamental_data.get('netMargin', 0.1)
             market_cap = self.fundamental_data.get('marketCap', 1e9)
             roce = self.fundamental_data.get('returnOnCapitalEmployed', 0.05)
-            revenue_stability = 0.1  # Placeholder
+            revenue_stability = 0.1
             moat_score = 0
             self.moat_basis = "No moat due to: "
             reasons = []
@@ -359,7 +368,7 @@ class StockAnalyzer:
         # 9. Valuation Score
         pe_ratio = self.fundamental_data.get('trailingPE', 20.0)
         pb_ratio = self.fundamental_data.get('priceToBook', 2.0)
-        industry_pe = 20.0  # Placeholder
+        industry_pe = 20.0
         pe_score = max(0, 100 - (pe_ratio / industry_pe) * 50)
         pb_score = max(0, 100 - (pb_ratio / 5) * 50)
         valuation_score = (pe_score + pb_score) / 2
@@ -377,27 +386,23 @@ class StockAnalyzer:
 
         # 11. NIFTY200DMARSIVolume
         nifty_score = 0
-        # DMA component
         if self.technical_data.get('current_price', 1000.0) > self.technical_data.get('dma_value', 1000.0):
             nifty_score += 25
             self.calculation_details.append("NIFTY200DMARSIVolume: Price > 200-Day DMA (+25)")
         else:
             self.calculation_details.append("NIFTY200DMARSIVolume: Price <= 200-Day DMA (+0)")
-        # RSI component
         if 30 <= rsi <= 70:
             nifty_score += 25
             self.calculation_details.append("NIFTY200DMARSIVolume: RSI in neutral range (+25)")
         else:
             nifty_score += 10
             self.calculation_details.append("NIFTY200DMARSIVolume: RSI outside neutral range (+10)")
-        # Volume component
         if self.technical_data.get('current_volume', 1e6) > self.technical_data.get('vol_avg', 1e6):
             nifty_score += 25
             self.calculation_details.append("NIFTY200DMARSIVolume: Volume > 20-Day Vol MA (+25)")
         else:
             nifty_score += 10
             self.calculation_details.append("NIFTY200DMARSIVolume: Volume <= 20-Day Vol MA (+10)")
-        # RS component
         rs = self.technical_data.get('rs', 50.0)
         if rs > 50:
             nifty_score += 25
@@ -435,18 +440,29 @@ class StockAnalyzer:
         scores.append(rs_score)
         self.calculation_details.append(f"Simple RS vs {self.benchmark_ticker}: {rs_score:.2f} -> Score: {rs_score}")
 
-        # Apply volatility penalty
+        # Apply tiered volatility penalty
         volatility = self.technical_data.get('volatility', 0.2)
-        volatility_penalty = max(0, 100 - (volatility * 100)) / 100
+        if volatility <= 0.2:
+            volatility_penalty = 0.9
+        elif volatility <= 0.4:
+            volatility_penalty = 0.7
+        elif volatility <= 0.6:
+            volatility_penalty = 0.6
+        else:
+            volatility_penalty = 0.5  # Minimum penalty
         self.calculation_details.append(f"Volatility: {volatility:.2f} -> Penalty: {volatility_penalty:.2f}")
 
         # Calculate Final Rating
-        weighted_scores = [score * weight * volatility_penalty for score, weight in zip(scores, self.weights)]
-        self.final_rating = round(sum(weighted_scores) / sum(self.weights), 2)
+        weighted_scores = [
+            score * weight * (volatility_penalty if index in [9, 10, 11, 12, 13, 14] else 1.0)
+            for index, (score, weight) in enumerate(zip(scores, self.weights))
+        ]
+        self.final_rating = round(sum(weighted_scores), 2)
+        self._cached_scores = scores
+        self._cached_final_rating = self.final_rating
         self.calculation_details.append(f"Final Rating: {self.final_rating}")
-
         return scores, self.final_rating
-
+    
     def get_results(self):
         """
         Return results as a dictionary for output.
@@ -460,7 +476,7 @@ class StockAnalyzer:
             'Inst. Holding': f"{self.user_inputs.get('inst_holding', 15.0)}% -> {min(100, self.user_inputs.get('inst_holding', 15.0) * 4)}",
             'D/E Ratio': f"{self.fundamental_data.get('debtToEquity', 1.0)} -> {max(0, 100 - self.fundamental_data.get('debtToEquity', 1.0) * 50)}",
             'RoE': f"{self.fundamental_data.get('returnOnEquity', 0.15)*100:.2f}% -> {min(100, self.fundamental_data.get('returnOnEquity', 0.15) * 500)}",
-            'Profit Growth YoY': f"{self.user_inputs.get('profit_growth', 10.0)}% -> {min(100, max(0, self.user_inputs.get('profit_growth', 10.0) * 5))}",
+            'Valuation Score': self._cached_scores[8],  # Get from cached scores
             'Profit CAGR 5Y': f"{self.user_inputs.get('cagr', 12.0)}% -> {min(100, max(0, self.user_inputs.get('cagr', 12.0) * 5))}",
             'Dividend Yield': f"{self.fundamental_data.get('dividendYield', 0.01)*100:.2f}% -> {min(100, self.fundamental_data.get('dividendYield', 0.01) * 5000)}",
             'Economic Moat': self.moat_basis,
@@ -514,7 +530,13 @@ class StockAnalyzer:
             plot_dir (str): Directory to save plots.
         """
         try:
-            data = yf.Ticker(self.ticker).history(period=f"{self.params['dma_length']+50}d")
+            plt.ylabel("Price")
+
+            # Ensure the plot directory exists
+            if not os.path.exists(plot_dir):
+                os.makedirs(plot_dir)
+            
+            data = yf.Ticker(self.ticker).history(period=f"{self.params['dma_length']}d")
             if data.empty:
                 raise ValueError("No data for plotting")
 
@@ -522,7 +544,6 @@ class StockAnalyzer:
             plt.plot(data.index, data['Close'], label='Close Price')
             plt.plot(data.index, data['Close'].rolling(window=self.params['dma_length']).mean(), label='200-Day DMA')
             plt.title(f"{self.ticker} Price and 200-Day DMA")
-            plt.xlabel("Date")
             plt.ylabel("Price")
             plt.legend()
             plt.grid()
@@ -541,50 +562,48 @@ def process_portfolio(input_excel, output_excel="portfolio_rankings.xlsx"):
     Args:
         input_excel (str): Path to input Excel file.
         output_excel (str): Path to output Excel file.
+        output_excel (str): Path to output Excel file.
     """
-    try:
-        # Read input Excel
-        df = pd.read_excel(input_excel)
-        required_columns = ['Ticker']
-        optional_columns = ['Promoter Holding (%)', 'Inst. Holding (%)', 'Profit Growth YoY (%)',
-                           'Profit CAGR 5Y (%)', 'Economic Moat', 'Exchange']
-        if not all(col in df.columns for col in required_columns):
-            raise ValueError("Input Excel must contain 'Ticker' column")
+    # Read input Excel
+    df = pd.read_excel(input_excel)
+    required_columns = ['Ticker']
+    if not all(col in df.columns for col in required_columns):
+        raise ValueError("Input Excel must contain 'Ticker' column")
 
-        # Check for duplicate tickers
-        if df['Ticker'].duplicated().any():
-            duplicates = df[df['Ticker'].duplicated(keep=False)]['Ticker'].unique()
-            logger.warning(f"Duplicate tickers found: {', '.join(duplicates)}. Processing first occurrence only.")
-            df = df.drop_duplicates(subset=['Ticker'], keep='first')
+    # Check for duplicate tickers
+    if df['Ticker'].duplicated().any():
+        duplicates = df[df['Ticker'].duplicated()]['Ticker'].tolist()
+        logger.warning(f"Duplicate tickers found: {', '.join(duplicates)}. Processing first occurrence only.")
+        df = df.drop_duplicates(subset=['Ticker'], keep='first')
 
-        # Create plots directory upfront
-        plot_dir = "plots"
-        if not os.path.exists(plot_dir):
-            os.makedirs(plot_dir)
+    # Create plots directory upfront
+    plot_dir = "plots"
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
 
-        results = []
-        all_calculation_details = []
-        missing_inputs = []
+    results = []
+    all_calculation_details = []
+    missing_inputs = []
 
-        # Process each stock
-        for index, row in df.iterrows():
-            ticker = str(row['Ticker']).strip().upper()
-            # Get exchange from Excel, default to NSE
-            exchange = row.get('Exchange', 'NSE').strip().upper() if 'Exchange' in df.columns else 'NSE'
-            
-            # Validate exchange
-            if exchange not in SUPPORTED_EXCHANGES:
-                logger.error(f"Unsupported exchange for {ticker}: {exchange}. Supported exchanges: {', '.join(SUPPORTED_EXCHANGES)}")
-                results.append({
-                    'Ticker': ticker,
+    # Process each stock
+    for _, row in df.iterrows():
+        ticker = str(row['Ticker']).strip().upper()
+        # Get exchange from Excel, default to NSE
+        exchange = row.get('Exchange', 'NSE').strip().upper() if 'Exchange' in df.columns else 'NSE'
+
+        # Validate exchange
+        if exchange not in SUPPORTED_EXCHANGES:
+            logger.error(f"Unsupported exchange for {ticker}: {exchange}. Supported exchanges: {', '.join(SUPPORTED_EXCHANGES)}")
+            results.append({
+                'Ticker': ticker,
                     'Final Rating (0-100)': 'Error',
-                    'Calculation Details': f"Error: Unsupported exchange {exchange}"
-                })
-                continue
+                        'Calculation Details': f"Error: Unsupported exchange {exchange}"
+                    })
+            continue
 
             # Append suffix if defined for the exchange
             suffix = config[exchange].get('suffix', '')
-            if suffix and not ticker.endswith(suffix):
+            if suffix and not ticker.endswith(f".{suffix}"):
                 ticker += suffix
 
             print(f"\nProcessing {ticker} ({exchange})...")
@@ -609,7 +628,7 @@ def process_portfolio(input_excel, output_excel="portfolio_rankings.xlsx"):
 
                 # Calculate metrics and rating
                 analyzer.calculate_technical_metrics()
-                scores, final_rating = analyzer.calculate_final_rating()
+                analyzer.calculate_final_rating()
                 result = analyzer.get_results()
                 results.append(result)
                 all_calculation_details.extend([f"{ticker}: {detail}" for detail in analyzer.calculation_details])
@@ -626,41 +645,36 @@ def process_portfolio(input_excel, output_excel="portfolio_rankings.xlsx"):
                 })
                 all_calculation_details.append(f"{ticker}: Error: {str(e)}")
 
-        # Log missing inputs summary
-        if missing_inputs:
-            print("\nWarning: Missing inputs in Excel file (defaults used):")
-            for entry in missing_inputs:
-                print(f"- {entry}")
+    # Log missing inputs summary
+    if missing_inputs:
+        print("\nWarning: Missing inputs in Excel file (defaults used):")
+        for entry in missing_inputs:
+            print(f"- {entry}")
 
-        # Create output Excel
-        results_df = pd.DataFrame(results)
-        calc_details_df = pd.DataFrame(all_calculation_details, columns=['Calculation Details'])
+    # Create output Excel
+    results_df = pd.DataFrame(results)
+    calc_details_df = pd.DataFrame(all_calculation_details, columns=['Calculation Details'])
 
-        with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
-            results_df.to_excel(writer, sheet_name='Rankings', index=False)
-            calc_details_df.to_excel(writer, sheet_name='Calculation Details', index=False)
+    with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
+        results_df.to_excel(writer, sheet_name='Rankings', index=False)
+        calc_details_df.to_excel(writer, sheet_name='Calculation Details', index=False)
 
-            # Auto-adjust column widths
-            for sheet in ['Rankings', 'Calculation Details']:
-                worksheet = writer.sheets[sheet]
-                for col in worksheet.columns:
-                    max_length = 0
-                    column = col[0].column_letter
-                    for cell in col:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-                    adjusted_width = max_length + 2
-                    worksheet.column_dimensions[column].width = adjusted_width
-
-        logger.info(f"Saved portfolio rankings to {output_excel}")
-        print(f"\nResults saved to {output_excel}")
-
-    except Exception as e:
-        logger.error(f"Failed to process portfolio: {e}")
-        print(f"Error: {e}")
+        # Auto-adjust column widths
+        for sheet in ['Rankings', 'Calculation Details']:
+            worksheet = writer.sheets[sheet]
+            for col in worksheet.columns:
+                max_length = 0
+                column = col[0].column_letter
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = max_length + 2
+                worksheet.column_dimensions[column].width = adjusted_width
+    logger.info(f"Saved portfolio rankings to {output_excel}")
+    print(f"\nResults saved to {output_excel}")
 
 def main():
     """Main function to run stock or portfolio analysis."""
@@ -682,11 +696,11 @@ def main():
         print(f"Supported exchanges: {', '.join(SUPPORTED_EXCHANGES)}")
         ticker = session.prompt("Enter the stock ticker (e.g., RELIANCE.NS for NSE, NXPI for NASDAQ, AAPL for NYSE): ").strip().upper()
         exchange = session.prompt(f"Enter the exchange (default NSE): ", default="NSE").strip().upper()
-        
+
         if exchange not in SUPPORTED_EXCHANGES:
             print(f"Error: Unsupported exchange {exchange}. Supported exchanges: {', '.join(SUPPORTED_EXCHANGES)}")
             return
-        
+
         # Append suffix if needed
         suffix = config[exchange].get('suffix', '')
         if suffix and not ticker.endswith(suffix):
