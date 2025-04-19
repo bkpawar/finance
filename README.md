@@ -14,7 +14,7 @@ The Python script, `stock_ranking.py`, is a stock analysis tool designed to eval
 
 This stock ranking tool is provided strictly for **educational and informational purposes** and is not intended as financial advice, investment recommendations, or a solicitation to buy or sell securities. The developer, contributors, and distributors of this tool, including the author, shall not be held liable for any financial losses, legal actions, or regulatory consequences arising from its use, including but not limited to actions by the **Securities and Exchange Board of India (SEBI)** or any other regulatory authority. Users are solely responsible for their investment decisions and should consult a SEBI-registered financial advisor or conduct independent research before investing. The tool’s outputs, including the Final Rating, are based on publicly available data and user inputs, which may contain errors or omissions, and do not guarantee future performance.
 
-### Code with Inline Documentation
+## Code with Inline Documentation
 Below is the complete code with detailed comments explaining each section and function.
 
 ```python
@@ -79,7 +79,7 @@ The tool combines fundamental and technical parameters to give a balanced view, 
  |--------------|---------------------|-----------------------|---------------|
  | RELIANCE.NS | 50.6 | 11.5 | Wide |
  | TCS.NS | 72.3 | 9.0 | |
- ```
+
 - The tool validates inputs, using defaults (e.g., 10.0 for Profit Growth) if values are missing or invalid.
 
 ### 2. Data Collection
