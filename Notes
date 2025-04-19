@@ -1,0 +1,27 @@
+### Limitations and Notes
+- **User Input Parameters**:
+  - The 7 parameters requiring input are critical for an accurate final rating. Users must source data from reliable platforms (Screener.in, Moneycontrol, NSE/BSE) to avoid relying on defaults.
+  - The instructions provided are designed to be actionable, with clear sources and calculation steps.
+- **Data Fetching**:
+  - `yfinance` reliably provides Debt-to-Equity Ratio, RoE, and Dividend Yield for most NSE stocks, but data may be missing for smaller companies.
+  - If `^NSEI` (NIFTY 50) is unavailable, RS will show “Invalid Symbol,” and the score defaults to 50.
+- **Error Handling**:
+  - The code validates user inputs and handles invalid tickers or missing data gracefully.
+  - If errors occur (e.g., no historical data), it prints an error message and exits.
+- **Customization**:
+  - Adjust scoring thresholds or weights in `calculate_final_rating` to match your preferences.
+  - Add more fundamental data sources (e.g., paid APIs like Alpha Vantage) for better coverage.
+  - Replace `symbol_trend_rs` with a programmatic calculation (e.g., based on RSI or MACD) if desired.
+
+### Potential Enhancements
+- **Automate More Parameters**: Use paid APIs (e.g., Financial Modeling Prep) to fetch Promoter Holding or Profit Growth, reducing user inputs.
+- **Dynamic Moat Assessment**: Estimate moat based on financial metrics (e.g., high margins, large market cap).
+- **GUI**: Create a graphical interface (e.g., with `tkinter`) for easier input and output.
+- **Export Results**: Save the table to a CSV or Excel file.
+
+### Example Workflow
+**Stock**: Reliance Industries (`RELIANCE.NS`)
+1. **Run the Program**:
+   - `python stock_info.py`
+2. **Enter Ticker**:
+   - Input: `RELIANCE.NS`
