@@ -18,16 +18,18 @@ Below is the complete code with detailed comments explaining each section and fu
 Stock Ranking Analysis Tool
 ==========================
 This script analyzes NSE stocks by computing a Final Rating (0-100) based on 15 fundamental and technical parameters.
-It uses yahooquery and yfinance for data, supports user inputs for select metrics, and allows overriding the Economic Moat.
-The goal is to identify stocks with strong fundamentals and technical trends for better investment returns.
+It supports:
+- Single stock analysis with interactive user inputs.
+- Portfolio analysis via an input Excel file containing stock tickers and optional user inputs.
+- Outputs results to an Excel file with rankings and calculation details.
 
 Key Features:
-- Fetches fundamental data (e.g., D/E Ratio, RoE) and technical data (e.g., RSI, DMA).
+- Fetches fundamental data (e.g., D/E Ratio, RoE) using yahooquery and yfinance.
 - Calculates Economic Moat based on profit margin, market cap, ROIC, and revenue stability.
-- Prompts user for 4 inputs and optional moat override.
-- Applies weighted scoring with volatility penalty.
-- Outputs a table, CSV, plot, and calculation details.
+- Processes user inputs from Excel or CLI for Promoter Holding, Institutional Holding, Profit Growth, and Profit CAGR.
+- Allows Economic Moat override via Excel or CLI.
+- Generates a table, CSV, plots, and an output Excel file with rankings.
+- Includes detailed calculation explanations for auto-calculated parameters.
 
-Dependencies: yahooquery, yfinance, pandas, numpy, ta, tabulate, prompt_toolkit, matplotlib
-"""
+Dependencies: yahooquery, yfinance, pandas, numpy, ta, tabulate, prompt_toolkit, matplotlib, openpyxl
 

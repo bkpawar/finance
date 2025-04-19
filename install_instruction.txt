@@ -77,26 +77,75 @@ pip install yfinance pandas numpy ta tabulate
 
 ### Example Interaction
 ```
-Enter the NSE stock ticker (e.g., RELIANCE.NS): RELIANCE.NS
+Steps to Run
 
-Please provide the following parameters. Instructions are provided.
+### Prerequisites
+- **Python**: 3.8 or higher.
+- **Libraries**:
+  ```bash
+  pip install yahooquery yfinance pandas numpy ta tabulate prompt_toolkit matplotlib openpyxl
+  ```
 
-Promoter Holding (%): Percentage of shares owned by promoters.
-  - Source: Screener.in, Moneycontrol, or NSE/BSE under 'Shareholding Pattern'.
-  - Example: If promoters own 60%, enter 60.0. Default: 50.0
-Enter Promoter Holding (%) [0-100]: 50.6
-...
-Economic Moat: Calculated as 'Narrow'.
-  - Basis: Narrow moat due to: High profit margin (15.2%)
-  - Override if you disagree (e.g., based on Morningstar or industry analysis).
-  - Options: None, Narrow, Wide. Default: Accept calculated value.
-Override Economic Moat? (Enter None, Narrow, Wide, or press Enter to accept): Wide
+### Setup
+1. **Save the Code**:
+   - Save the updated code as `stock_ranking.py`.
+
+2. **Create `config.ini`**:
+   - In the same directory, create `config.ini`:
+     ```ini
+     [DEFAULT]
+     benchmark_ticker = ^NSEI
+     dma_length = 200
+     rsi_length = 14
+     vol_avg_length = 20
+     rs_length = 63
+     weights = 0.1,0.1,0.1,0.1,0.1,0.1,0.05,0.05,0.15,0.1,0.1,0.05,0.05,0.05,0.1
+     ```
+
+3. **Prepare Input Excel**:
+   - Create `portfolio.xlsx` with at least a `Ticker` column. Example:
+     ```excel
+     | Ticker       | Promoter Holding (%) | Inst. Holding (%) | Profit Growth YoY (%) | Profit CAGR 5Y (%) | Economic Moat |
+     |--------------|---------------------|-------------------|-----------------------|--------------------|---------------|
+     | RELIANCE.NS  | 50.6                | 38.5              |                       |                    | Wide          |
+     | TCS.NS       | 72.3                | 23.4              | 9.0                   | 10.2               |               |
+     ```
+   - Ensure `Profit Growth YoY (%)` and `Profit CAGR 5Y (%)` are provided for `RELIANCE.NS` to avoid warnings. Sources: [Screener.in](https://www.screener.in/) or [Moneycontrol](https://www.moneycontrol.com/).
+
+### Running the Code
+1. **Portfolio Mode**:
+   - Run with:
+     ```bash
+     python stock_ranking.py --portfolio portfolio.xlsx
+     ```
+   - **Output**:
+     - `portfolio_rankings.xlsx`: Rankings and calculation details.
+     - `plots/`: PNG plots for each stock (e.g., `plots/RELIANCE.NS_plot.png`).
+     - Console shows progress and warnings:
+       ```
+       Processing RELIANCE.NS...
+       Processing TCS.NS...
+       Warning: Missing inputs in Excel file (defaults used):
+       - RELIANCE.NS: Missing profit_growth, cagr
+       Results saved to portfolio_rankings.xlsx
+       ```
+
+2. **Single Stock Mode**:
+   - Run without arguments:
+     ```bash
+     python stock_ranking.py
+     ```
+   - Follow interactive prompts.
+
+### Example Input Excel Fix
+To eliminate the warnings for `RELIANCE.NS`, update `portfolio.xlsx`:
+```excel
+| Ticker       | Promoter Holding (%) | Inst. Holding (%) | Profit Growth YoY (%) | Profit CAGR 5Y (%) | Economic Moat |
+|--------------|---------------------|-------------------|-----------------------|--------------------|---------------|
+| RELIANCE.NS  | 50.6                | 38.5              | 11.5                  | 8.7                | Wide          |
+| TCS.NS       | 72.3                | 23.4              | 9.0                   | 10.2               |               |
 ```
+- Values for `Profit Growth YoY (%)` and `Profit CAGR 5Y (%)` can be sourced from financial websites or reports.
 
-### Troubleshooting
-- **Module Not Found**: Ensure all libraries are installed (`pip install ...`).
-- **API Errors**: Check internet connection; APIs may have rate limits.
-- **Invalid Ticker**: Use correct NSE tickers (e.g., `TCS.NS`).
-- **Data Gaps**: If data is missing, defaults are used; consider paid APIs for completeness.
 
 

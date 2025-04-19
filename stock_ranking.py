@@ -10,6 +10,9 @@ from tabulate import tabulate
 from prompt_toolkit import PromptSession
 import matplotlib.pyplot as plt
 import os
+import argparse
+import openpyxl
+from openpyxl.utils import get_column_letter
 
 # Setup logging for debugging and error tracking
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -52,6 +55,7 @@ class StockAnalyzer:
         self.user_inputs = {}      # Store user-provided inputs
         self.moat_basis = ""       # Store Economic Moat calculation details
         self.calculation_details = []  # Store details for auto-calculated parameters
+        self.final_rating = None   # Initialize final_rating attribute
 
     def fetch_fundamental_data(self):
         """
@@ -65,12 +69,12 @@ class StockAnalyzer:
 
             # Initialize default values
             self.fundamental_data = {
-                'promoter_holding': 50.0,  # User input
-                'inst_holding': 15.0,      # User input
+                'promoter_holding': 50.0,  # User input or default
+                'inst_holding': 15.0,      # User input or default
                 'de_ratio': 1.0,
                 'roe': 15.0,
-                'profit_growth': 10.0,     # User input
-                'cagr': 12.0,              # User input
+                'profit_growth': 10.0,     # User input or default
+                'cagr': 12.0,              # User input or default
                 'div_yield': 1.0,
                 'moat': 'Narrow',
                 'valuation_score': 50.0,
@@ -89,7 +93,7 @@ class StockAnalyzer:
                 self.calculation_details.append(
                     f"RoE: {self.fundamental_data['roe']:.2f}% (Fetched from yahooquery)"
                 )
-            if 'dividendYield' in info:
+            if 'dividendYield' in info and info['dividendYield']:
                 self.fundamental_data['div_yield'] = info['dividendYield'] * 100
                 self.calculation_details.append(
                     f"Dividend Yield: {self.fundamental_data['div_yield']:.2f}% (Fetched from yahooquery)"
@@ -161,16 +165,55 @@ class StockAnalyzer:
 
             logger.info(f"Fetched fundamental data for {self.ticker}")
         except Exception as e:
-            logger.error(f"Failed to fetch fundamental data: {e}")
+            logger.error(f"Failed to fetch fundamental data for {self.ticker}: {e}")
             raise
+
+    def set_user_inputs(self, inputs_dict):
+        """
+        Set user inputs from Excel or CLI, with validation and defaults.
+        Args:
+            inputs_dict (dict): Dictionary with user inputs (e.g., {'promoter_holding': 50.6}).
+        """
+        defaults = {
+            'promoter_holding': 50.0,
+            'inst_holding': 15.0,
+            'profit_growth': 10.0,
+            'cagr': 12.0,
+            'moat': None  # None means use calculated moat
+        }
+
+        # Validate and set inputs
+        for key, default in defaults.items():
+            value = inputs_dict.get(key, default)
+            if key == 'moat' and value:
+                if value.capitalize() in ['None', 'Narrow', 'Wide']:
+                    self.fundamental_data['moat'] = value.capitalize()
+                    self.moat_basis += f" (Overridden by user to {self.fundamental_data['moat']})"
+                    self.calculation_details[-1] = (
+                        f"Economic Moat: {self.fundamental_data['moat']} ({self.moat_basis})"
+                    )
+                else:
+                    logger.warning(f"Invalid moat override for {self.ticker}: {value}. Using calculated moat.")
+            else:
+                try:
+                    value = float(value) if value is not None else default
+                    if key == 'promoter_holding' and not (0 <= value <= 100):
+                        raise ValueError("Promoter Holding must be between 0 and 100")
+                    if key == 'inst_holding' and not (0 <= value <= 100):
+                        raise ValueError("Institutional Holding must be between 0 and 100")
+                    if key in ['profit_growth', 'cagr'] and not (-100 <= value <= 100):
+                        raise ValueError(f"{key} must be between -100 and 100")
+                    self.user_inputs[key] = value
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid {key} for {self.ticker}: {value}. Using default: {default}")
+                    self.user_inputs[key] = default
 
     def prompt_user_for_inputs(self):
         """
-        Prompt user for parameters that cannot be automated (4 inputs).
-        Allow override of calculated Economic Moat.
+        Prompt user for parameters interactively (used for single-stock mode).
         """
         session = PromptSession(multiline=False)
-        print("\nPlease provide the following parameters. Instructions are provided.\n")
+        print(f"\nPlease provide parameters for {self.ticker}. Instructions are provided.\n")
 
         # Promoter Holding
         print("Promoter Holding (%): Percentage of shares owned by promoters.")
@@ -337,7 +380,7 @@ class StockAnalyzer:
 
             logger.info(f"Calculated technical metrics for {self.ticker}")
         except Exception as e:
-            logger.error(f"Failed to calculate technical metrics: {e}")
+            logger.error(f"Failed to calculate technical metrics for {self.ticker}: {e}")
             raise
 
     def calculate_final_rating(self):
@@ -369,6 +412,8 @@ class StockAnalyzer:
         weighted_scores = [score * weight * volatility_penalty for score, weight in zip(scores, self.weights)]
         final_rating = round(sum(weighted_scores) / sum(self.weights), 2)
 
+        self.final_rating = final_rating  # Store final_rating as instance attribute
+
         self.calculation_details.append(
             f"Final Rating: {final_rating:.2f} "
             f"(Weighted average of 15 scores with volatility penalty {volatility_penalty:.2%})"
@@ -376,11 +421,38 @@ class StockAnalyzer:
 
         return scores, final_rating
 
+    def get_results(self):
+        """
+        Return results as a dictionary for output to Excel or table.
+        """
+        data = {**self.fundamental_data, **self.user_inputs}
+        return {
+            'Ticker': self.ticker,
+            'SymbolTrendRS': f"{data['symbol_trend_rs']:.2f}",
+            'NIFTY200DMARSIVolume': f"{data['nifty_dma_rsi_vol']:.2f}",
+            'Promoter Holding (%)': f"{data['promoter_holding']:.2f}",
+            'Inst. Holding (%)': f"{data['inst_holding']:.2f}",
+            'D/E Ratio': f"{data['de_ratio']:.2f}",
+            'RoE (%)': f"{data['roe']:.2f}",
+            'Profit Growth YoY (%)': f"{data['profit_growth']:.2f}",
+            'Dividend Yield (%)': f"{data['div_yield']:.2f}",
+            'Economic Moat': f"{data['moat']} ({self.moat_basis})",
+            'Profit CAGR 5Y (%)': f"{data['cagr']:.2f}",
+            'Valuation Score': f"{data['valuation_score']:.2f}",
+            f"{self.params['dma_length']}-Day DMA": f"{self.technical_data['dma_value']:.2f}" if not np.isnan(self.technical_data.get('dma_value', np.nan)) else "N/A",
+            f"{self.params['rsi_length']}-Day RSI": f"{self.technical_data['rsi_value']:.2f}" if not np.isnan(self.technical_data.get('rsi_value', np.nan)) else "N/A",
+            f"{self.params['vol_avg_length']}-Day Vol MA": f"{self.technical_data['vol_avg']:.2f}" if not np.isnan(self.technical_data.get('vol_avg', np.nan)) else "N/A",
+            f"Simple RS vs NIFTY_50 ({self.params['rs_length']}d)": "Invalid Symbol" if np.isnan(self.technical_data.get('rs_scaled', np.nan)) else f"{self.technical_data['rs_scaled']:.2f}",
+            'Final Rating (0-100)': f"{self.final_rating:.2f}" if self.final_rating is not None else "N/A",
+            'Calculation Details': "; ".join(self.calculation_details)
+        }
+
     def display_table(self, scores, final_rating):
         """
-        Display results in a table and list calculation details for auto-calculated parameters.
+        Display results in a table and list calculation details for single-stock mode.
         Save results to CSV.
         """
+        self.final_rating = final_rating  # Store for get_results
         data = {**self.fundamental_data, **self.user_inputs}
         table_data = [
             ["Parameter", "Value"],
@@ -396,14 +468,14 @@ class StockAnalyzer:
             ["Profit CAGR 5Y (%)", f"{data['cagr']:.2f}"],
             ["Valuation Score", f"{data['valuation_score']:.2f}"],
             ["Calculated Metrics", ""],
-            [f"{self.params['dma_length']}-Day DMA", f"{self.technical_data['dma_value']:.2f}"],
-            [f"{self.params['rsi_length']}-Day RSI", f"{self.technical_data['rsi_value']:.2f}"],
-            [f"{self.params['vol_avg_length']}-Day Vol MA", f"{self.technical_data['vol_avg']:.2f}"],
-            [f"Simple RS vs NIFTY_50 ({self.params['rs_length']}d)", "Invalid Symbol" if np.isnan(self.technical_data['rs_scaled']) else f"{self.technical_data['rs_scaled']:.2f}"],
+            [f"{self.params['dma_length']}-Day DMA", f"{self.technical_data['dma_value']:.2f}" if not np.isnan(self.technical_data.get('dma_value', np.nan)) else "N/A"],
+            [f"{self.params['rsi_length']}-Day RSI", f"{self.technical_data['rsi_value']:.2f}" if not np.isnan(self.technical_data.get('rsi_value', np.nan)) else "N/A"],
+            [f"{self.params['vol_avg_length']}-Day Vol MA", f"{self.technical_data['vol_avg']:.2f}" if not np.isnan(self.technical_data.get('vol_avg', np.nan)) else "N/A"],
+            [f"Simple RS vs NIFTY_50 ({self.params['rs_length']}d)", "Invalid Symbol" if np.isnan(self.technical_data.get('rs_scaled', np.nan)) else f"{self.technical_data['rs_scaled']:.2f}"],
             ["Final Rating (0-100)", f"{final_rating:.2f}"]
         ]
 
-        print("\nStock Info Table")
+        print(f"\nStock Info Table for {self.ticker}")
         print(tabulate(table_data, headers="firstrow", tablefmt="grid"))
 
         print("\nCalculation Details for Automatically Calculated Parameters:")
@@ -414,41 +486,173 @@ class StockAnalyzer:
         df.to_csv(f"{self.ticker}_analysis.csv", index=False)
         logger.info(f"Saved results to {self.ticker}_analysis.csv")
 
-    def plot_metrics(self):
-        """Generate and save a plot of stock price vs. 200-Day DMA."""
-        stock = yf.Ticker(self.ticker)
-        data = stock.history(period="1y")
-        sma = SMAIndicator(data['Close'], window=self.params['dma_length']).sma_indicator()
+    def plot_metrics(self, output_dir="plots"):
+        """
+        Generate and save a plot of stock price vs. 200-Day DMA.
+        Args:
+            output_dir (str): Directory to save plots.
+        """
+        try:
+            stock = yf.Ticker(self.ticker)
+            data = stock.history(period="1y")
+            sma = SMAIndicator(data['Close'], window=self.params['dma_length']).sma_indicator()
 
-        plt.figure(figsize=(10, 6))
-        plt.plot(data.index, data['Close'], label='Close Price')
-        plt.plot(data.index, sma, label=f"{self.params['dma_length']}-Day DMA")
-        plt.title(f"{self.ticker} Price and DMA")
-        plt.xlabel("Date")
-        plt.ylabel("Price")
-        plt.legend()
-        plt.savefig(f"{self.ticker}_plot.png")
-        plt.close()
-        logger.info(f"Saved plot to {self.ticker}_plot.png")
+            plt.figure(figsize=(10, 6))
+            plt.plot(data.index, data['Close'], label='Close Price')
+            plt.plot(data.index, sma, label=f"{self.params['dma_length']}-Day DMA")
+            plt.title(f"{self.ticker} Price and DMA")
+            plt.xlabel("Date")
+            plt.ylabel("Price")
+            plt.legend()
+            plot_path = os.path.join(output_dir, f"{self.ticker}_plot.png")
+            plt.savefig(plot_path)
+            plt.close()
+            logger.info(f"Saved plot to {plot_path}")
+        except Exception as e:
+            logger.error(f"Failed to generate plot for {self.ticker}: {e}")
+
+def process_portfolio(input_excel, output_excel="portfolio_rankings.xlsx"):
+    """
+    Process a portfolio from an Excel file and generate an output Excel with rankings.
+    Args:
+        input_excel (str): Path to input Excel file.
+        output_excel (str): Path to output Excel file.
+    """
+    try:
+        # Read input Excel
+        df = pd.read_excel(input_excel)
+        required_columns = ['Ticker']
+        optional_columns = ['Promoter Holding (%)', 'Inst. Holding (%)', 'Profit Growth YoY (%)',
+                           'Profit CAGR 5Y (%)', 'Economic Moat']
+        if not all(col in df.columns for col in required_columns):
+            raise ValueError("Input Excel must contain 'Ticker' column")
+
+        # Check for duplicate tickers
+        if df['Ticker'].duplicated().any():
+            duplicates = df[df['Ticker'].duplicated(keep=False)]['Ticker'].unique()
+            logger.warning(f"Duplicate tickers found: {', '.join(duplicates)}. Processing first occurrence only.")
+            df = df.drop_duplicates(subset=['Ticker'], keep='first')
+
+        # Create plots directory upfront
+        plot_dir = "plots"
+        if not os.path.exists(plot_dir):
+            os.makedirs(plot_dir)
+
+        results = []
+        all_calculation_details = []
+        missing_inputs = []
+
+        # Process each stock
+        for index, row in df.iterrows():
+            ticker = str(row['Ticker']).strip().upper()
+            if not ticker.endswith('.NS'):
+                ticker += '.NS'
+
+            print(f"\nProcessing {ticker}...")
+            try:
+                analyzer = StockAnalyzer(ticker)
+                analyzer.fetch_fundamental_data()
+
+                # Track missing inputs
+                inputs_dict = {
+                    'promoter_holding': row.get('Promoter Holding (%)', np.nan),
+                    'inst_holding': row.get('Inst. Holding (%)', np.nan),
+                    'profit_growth': row.get('Profit Growth YoY (%)', np.nan),
+                    'cagr': row.get('Profit CAGR 5Y (%)', np.nan),
+                    'moat': row.get('Economic Moat', None)
+                }
+                missing = [key for key, value in inputs_dict.items() if pd.isna(value) and key != 'moat']
+                if missing:
+                    missing_inputs.append(f"{ticker}: Missing {', '.join(missing)}")
+
+                # Set user inputs from Excel
+                analyzer.set_user_inputs(inputs_dict)
+
+                # Calculate metrics and rating
+                analyzer.calculate_technical_metrics()
+                scores, final_rating = analyzer.calculate_final_rating()
+                result = analyzer.get_results()
+                results.append(result)
+                all_calculation_details.extend([f"{ticker}: {detail}" for detail in analyzer.calculation_details])
+
+                # Generate plot
+                analyzer.plot_metrics(plot_dir)
+
+            except Exception as e:
+                logger.error(f"Failed to process {ticker}: {e}")
+                results.append({
+                    'Ticker': ticker,
+                    'Final Rating (0-100)': 'Error',
+                    'Calculation Details': f"Error: {str(e)}"
+                })
+                all_calculation_details.append(f"{ticker}: Error: {str(e)}")
+
+        # Log missing inputs summary
+        if missing_inputs:
+            print("\nWarning: Missing inputs in Excel file (defaults used):")
+            for entry in missing_inputs:
+                print(f"- {entry}")
+
+        # Create output Excel
+        results_df = pd.DataFrame(results)
+        calc_details_df = pd.DataFrame(all_calculation_details, columns=['Calculation Details'])
+
+        with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
+            results_df.to_excel(writer, sheet_name='Rankings', index=False)
+            calc_details_df.to_excel(writer, sheet_name='Calculation Details', index=False)
+
+            # Auto-adjust column widths
+            for sheet in ['Rankings', 'Calculation Details']:
+                worksheet = writer.sheets[sheet]
+                for col in worksheet.columns:
+                    max_length = 0
+                    column = col[0].column_letter
+                    for cell in col:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = max_length + 2
+                    worksheet.column_dimensions[column].width = adjusted_width
+
+        logger.info(f"Saved portfolio rankings to {output_excel}")
+        print(f"\nResults saved to {output_excel}")
+
+    except Exception as e:
+        logger.error(f"Failed to process portfolio: {e}")
+        print(f"Error: {e}")
 
 def main():
-    """Main function to run the stock analysis."""
-    session = PromptSession(multiline=False)
-    ticker = session.prompt("Enter the NSE stock ticker (e.g., RELIANCE.NS): ").strip().upper()
-    if not ticker.endswith('.NS'):
-        ticker += '.NS'
+    """Main function to run stock or portfolio analysis."""
+    parser = argparse.ArgumentParser(description="Stock Ranking Analysis Tool")
+    parser.add_argument('--portfolio', type=str, help="Path to portfolio Excel file (e.g., portfolio.xlsx)")
+    args = parser.parse_args()
 
-    try:
-        analyzer = StockAnalyzer(ticker)
-        analyzer.fetch_fundamental_data()
-        analyzer.prompt_user_for_inputs()
-        analyzer.calculate_technical_metrics()
-        scores, final_rating = analyzer.calculate_final_rating()
-        analyzer.display_table(scores, final_rating)
-        analyzer.plot_metrics()
-    except Exception as e:
-        logger.error(f"Analysis failed: {e}")
-        print("Please ensure the ticker is valid and try again.")
+    if args.portfolio:
+        # Portfolio mode
+        if not os.path.exists(args.portfolio):
+            print(f"Error: Portfolio file {args.portfolio} not found.")
+            return
+        process_portfolio(args.portfolio)
+    else:
+        # Single stock mode
+        session = PromptSession(multiline=False)
+        ticker = session.prompt("Enter the NSE stock ticker (e.g., RELIANCE.NS): ").strip().upper()
+        if not ticker.endswith('.NS'):
+            ticker += '.NS'
+
+        try:
+            analyzer = StockAnalyzer(ticker)
+            analyzer.fetch_fundamental_data()
+            analyzer.prompt_user_for_inputs()
+            analyzer.calculate_technical_metrics()
+            scores, final_rating = analyzer.calculate_final_rating()
+            analyzer.display_table(scores, final_rating)
+            analyzer.plot_metrics()
+        except Exception as e:
+            logger.error(f"Analysis failed for {ticker}: {e}")
+            print("Please ensure the ticker is valid and try again.")
 
 if __name__ == "__main__":
     main()
