@@ -1,0 +1,75 @@
+### Installation Instructions
+Install the required Python libraries:
+```bash
+pip install yfinance pandas numpy ta tabulate
+```
+
+### How to Use
+1. **Save the Code**:
+   - Save the code as `stock_info.py`.
+
+2. **Run the Program**:
+   - Open a terminal or command prompt.
+   - Navigate to the directory containing `stock_info.py`.
+   - Run: `python stock_info.py`.
+
+3. **Enter the Ticker**:
+   - Input an NSE ticker (e.g., `RELIANCE.NS`, `TCS.NS`).
+
+4. **Provide Parameter Inputs**:
+   - The program will prompt for the 7 parameters, with instructions:
+     ```
+     Enter the NSE stock ticker (e.g., RELIANCE.NS): RELIANCE.NS
+
+     Please provide the following parameters. Instructions are provided for each.
+
+     Promoter Holding (%): Percentage of shares owned by promoters (founders, directors).
+     How to calculate:
+       - Source: Check Screener.in, Moneycontrol, or NSE/BSE filings under 'Shareholding Pattern'.
+       - Example: If promoters own 60% of shares, enter 60.0.
+       - Default: 50.0 if unknown.
+     Enter Promoter Holding (%) [0-100]: 50.6
+     ```
+   - Follow the instructions to source each value from Screener.in, Moneycontrol, or financial reports. Press Enter to use the default if unknown.
+
+5. **View the Output**:
+   - The program displays a table with all parameters and the final rating, e.g.:
+     ```
+     Stock Info Table
+     +-------------------------------+----------------+
+     | Parameter                     | Value          |
+     +===============================+================+
+     | SymbolTrendRS (Manual)        | 50.00          |
+     +-------------------------------+----------------+
+     | NIFTY200DMARSIVolume (Manual) | 50.00          |
+     +-------------------------------+----------------+
+     | Promoter Holding (%)          | 50.60          |
+     +-------------------------------+----------------+
+     | Inst. Holding (%)             | 38.50          |
+     +-------------------------------+----------------+
+     | D/E Ratio                     | 0.60           |
+     +-------------------------------+----------------+
+     | RoE (%)                       | 9.20           |
+     +-------------------------------+----------------+
+     | Profit Growth YoY (%)         | 11.50          |
+     +-------------------------------+----------------+
+     | Dividend Yield (%)            | 0.40           |
+     +-------------------------------+----------------+
+     | Economic Moat                 | Narrow         |
+     +-------------------------------+----------------+
+     | Profit CAGR 5Y (%)            | 8.70           |
+     +-------------------------------+----------------+
+     | Valuation Score               | 50.00          |
+     +-------------------------------+----------------+
+     | Calculated Metrics            |                |
+     +-------------------------------+----------------+
+     | 200-Day DMA                   | 2950.34        |
+     +-------------------------------+----------------+
+     | 14-Day RSI                    | 62.45          |
+     +-------------------------------+----------------+
+     | 20-Day Vol MA                 | 6500000.00     |
+     +-------------------------------+----------------+
+     | Simple RS vs NIFTY_50 (63d)   | 48.76          |
+     +-------------------------------+----------------+
+     | Final Rating (0-100)          | 65.23          |
+     +-------------------------------+----------------+
