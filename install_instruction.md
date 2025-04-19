@@ -30,7 +30,7 @@ pip3 install yahooquery yfinance pandas numpy ta tabulate prompt_toolkit matplot
 1. **Install Dependencies**:
    - Install required Python libraries using pip:
      ```bash
-     pip install yahooquery yfinance pandas numpy ta tabulate prompt_toolkit matplotlib
+     pip3 install yahooquery yfinance pandas numpy ta tabulate prompt_toolkit matplotlib openpyxl
      ```
 
 2. **Save the Code**:
