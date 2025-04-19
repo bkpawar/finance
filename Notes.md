@@ -1,4 +1,4 @@
-## I express heartfelt gratitude to Vivek Maharani for his invaluable teachings which resulted the idea behind this stock ranking tool.
+
 ### Objective
 The code aims to rank stocks based on a combination of **fundamental analysis** (assessing a company’s financial health) and **technical analysis** (evaluating price trends and market signals). The Final Rating (0-100) reflects a stock’s investment potential, with higher scores indicating stronger fundamentals, positive momentum, and lower risk.
 
