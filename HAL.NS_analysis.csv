@@ -1,0 +1,19 @@
+Parameter,Value,Score
+Promoter Holding,50.0%,100
+Inst. Holding,15.0%,60.0
+D/E Ratio,0.004,99.8
+RoE,15.00%,75.0
+Profit Growth YoY,10.0%,50.0
+Profit CAGR 5Y,12.0%,60.0
+Dividend Yield,1.00%,50.0
+Economic Moat,None (Overridden by user to None),0
+Valuation Score,"PE=20.00, PB=2.00",65.0
+SymbolTrendRS,RSI=63.87,28.466594319498107
+NIFTY200DMARSIVolume,Composite,45
+200-Day DMA,Below,0
+14-Day RSI,63.87,50
+20-Day Volume MA,Below,25
+Simple RS vs Benchmark,28.22,28.223677564139233
+Final Rating,,63.22
+Recommendation,Sell,
+Recommendation Reasons,Moderate final rating (60-79); Weak relative strength (RS < 30); RSI in neutral range; Negative MACD (Bearish signal),

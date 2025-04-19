@@ -1,0 +1,17 @@
+Parameter,Value,Score
+Promoter Holding,70.0%,100.0
+Inst. Holding,20.0%,80.0
+D/E Ratio,738.948,0.0
+RoE,15.00%,75.0
+Profit Growth YoY,20.0%,100.0
+Profit CAGR 5Y,20.0%,100.0
+Dividend Yield,1.00%,50.0
+Economic Moat,Wide (Overridden by user to Wide),100.0
+Valuation Score,"PE=20.00, PB=2.00",65.0
+SymbolTrendRS,RSI=62.68,40.6690569081062
+NIFTY200DMARSIVolume,Composite,85.0
+200-Day DMA,Above,100.0
+14-Day RSI,62.68,50.0
+20-Day Volume MA,Below,25.0
+Simple RS vs Benchmark,58.92,58.915382323175486
+Final Rating,,46.83
