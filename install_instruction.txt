@@ -3,73 +3,100 @@ Install the required Python libraries:
 ```bash
 pip install yfinance pandas numpy ta tabulate
 ```
+### Code Structure
+- **Imports**: Libraries for data fetching (`yahooquery`, `yfinance`), technical analysis (`ta`), data handling (`pandas`, `numpy`), user interface (`prompt_toolkit`, `tabulate`), plotting (`matplotlib`), and configuration (`configparser`).
+- **StockAnalyzer Class**:
+  - `__init__`: Initializes ticker, configuration, and data storage.
+  - `fetch_fundamental_data`: Retrieves fundamental metrics and calculates Economic Moat and Valuation Score.
+  - `prompt_user_for_inputs`: Collects 4 user inputs and allows moat override.
+  - `calculate_technical_metrics`: Computes technical indicators and custom metrics.
+  - `calculate_final_rating`: Calculates weighted scores with volatility penalty.
+  - `display_table`: Outputs results and calculation details.
+  - `plot_metrics`: Generates price vs. DMA plot.
+- **Main Function**: Orchestrates the analysis process with user input and error handling.
 
-### How to Use
-1. **Save the Code**:
-   - Save the code as `stock_info.py`.
+---
 
-2. **Run the Program**:
-   - Open a terminal or command prompt.
-   - Navigate to the directory containing `stock_info.py`.
-   - Run: `python stock_info.py`.
+## 2. Steps to Run
 
-3. **Enter the Ticker**:
-   - Input an NSE ticker (e.g., `RELIANCE.NS`, `TCS.NS`).
+### Prerequisites
+- **Python Version**: Python 3.8 or higher.
+- **Operating System**: macOS, Windows, or Linux.
+- **Internet Connection**: Required for API data fetching.
 
-4. **Provide Parameter Inputs**:
-   - The program will prompt for the 7 parameters, with instructions:
+### Step-by-Step Instructions
+1. **Install Dependencies**:
+   - Install required Python libraries using pip:
+     ```bash
+     pip install yahooquery yfinance pandas numpy ta tabulate prompt_toolkit matplotlib
      ```
-     Enter the NSE stock ticker (e.g., RELIANCE.NS): RELIANCE.NS
 
-     Please provide the following parameters. Instructions are provided for each.
+2. **Save the Code**:
+   - Copy the code above into a file named `stock_ranking.py`.
+   - Save it in a directory (e.g., `/Users/your_username/finance/`).
 
-     Promoter Holding (%): Percentage of shares owned by promoters (founders, directors).
-     How to calculate:
-       - Source: Check Screener.in, Moneycontrol, or NSE/BSE filings under 'Shareholding Pattern'.
-       - Example: If promoters own 60% of shares, enter 60.0.
-       - Default: 50.0 if unknown.
-     Enter Promoter Holding (%) [0-100]: 50.6
+3. **Create Configuration File**:
+   - Create a file named `config.ini` in the same directory as `stock_ranking.py`.
+   - Add the following content:
+     ```ini
+     [DEFAULT]
+     benchmark_ticker = ^NSEI
+     dma_length = 200
+     rsi_length = 14
+     vol_avg_length = 20
+     rs_length = 63
+     weights = 0.1,0.1,0.1,0.1,0.1,0.1,0.05,0.05,0.15,0.1,0.1,0.05,0.05,0.05,0.1
      ```
-   - Follow the instructions to source each value from Screener.in, Moneycontrol, or financial reports. Press Enter to use the default if unknown.
+   - This configures the benchmark index (NIFTY 50), technical indicator periods, and scoring weights.
 
-5. **View the Output**:
-   - The program displays a table with all parameters and the final rating, e.g.:
+4. **Run the Script**:
+   - Open a terminal and navigate to the directory:
+     ```bash
+     cd /Users/your_username/finance
      ```
-     Stock Info Table
-     +-------------------------------+----------------+
-     | Parameter                     | Value          |
-     +===============================+================+
-     | SymbolTrendRS (Manual)        | 50.00          |
-     +-------------------------------+----------------+
-     | NIFTY200DMARSIVolume (Manual) | 50.00          |
-     +-------------------------------+----------------+
-     | Promoter Holding (%)          | 50.60          |
-     +-------------------------------+----------------+
-     | Inst. Holding (%)             | 38.50          |
-     +-------------------------------+----------------+
-     | D/E Ratio                     | 0.60           |
-     +-------------------------------+----------------+
-     | RoE (%)                       | 9.20           |
-     +-------------------------------+----------------+
-     | Profit Growth YoY (%)         | 11.50          |
-     +-------------------------------+----------------+
-     | Dividend Yield (%)            | 0.40           |
-     +-------------------------------+----------------+
-     | Economic Moat                 | Narrow         |
-     +-------------------------------+----------------+
-     | Profit CAGR 5Y (%)            | 8.70           |
-     +-------------------------------+----------------+
-     | Valuation Score               | 50.00          |
-     +-------------------------------+----------------+
-     | Calculated Metrics            |                |
-     +-------------------------------+----------------+
-     | 200-Day DMA                   | 2950.34        |
-     +-------------------------------+----------------+
-     | 14-Day RSI                    | 62.45          |
-     +-------------------------------+----------------+
-     | 20-Day Vol MA                 | 6500000.00     |
-     +-------------------------------+----------------+
-     | Simple RS vs NIFTY_50 (63d)   | 48.76          |
-     +-------------------------------+----------------+
-     | Final Rating (0-100)          | 65.23          |
-     +-------------------------------+----------------+
+   - Execute the script:
+     ```bash
+     python stock_ranking.py
+     ```
+
+5. **Provide Inputs**:
+   - **Ticker**: Enter an NSE stock ticker (e.g., `RELIANCE.NS`). The script appends `.NS` if omitted.
+   - **User Inputs**:
+     - **Promoter Holding (%)**: Percentage of shares owned by promoters (e.g., from Screener.in).
+     - **Institutional Holding (%)**: Percentage owned by FII + DII.
+     - **Profit Growth YoY (%)**: Year-over-year profit growth.
+     - **Profit CAGR 5Y (%)**: 5-year profit CAGR.
+     - Press Enter to use defaults if unsure.
+   - **Economic Moat Override**: Review the calculated moat (e.g., `Narrow`) and its basis, then accept or override with `None`, `Narrow`, or `Wide`.
+
+6. **Review Output**:
+   - **Console**: Displays a table with all parameters, calculation details for auto-calculated metrics, and a Final Rating.
+   - **Files**:
+     - `{ticker}_analysis.csv`: Table data in CSV format.
+     - `{ticker}_plot.png`: Plot of stock price vs. 200-Day DMA.
+
+### Example Interaction
+```
+Enter the NSE stock ticker (e.g., RELIANCE.NS): RELIANCE.NS
+
+Please provide the following parameters. Instructions are provided.
+
+Promoter Holding (%): Percentage of shares owned by promoters.
+  - Source: Screener.in, Moneycontrol, or NSE/BSE under 'Shareholding Pattern'.
+  - Example: If promoters own 60%, enter 60.0. Default: 50.0
+Enter Promoter Holding (%) [0-100]: 50.6
+...
+Economic Moat: Calculated as 'Narrow'.
+  - Basis: Narrow moat due to: High profit margin (15.2%)
+  - Override if you disagree (e.g., based on Morningstar or industry analysis).
+  - Options: None, Narrow, Wide. Default: Accept calculated value.
+Override Economic Moat? (Enter None, Narrow, Wide, or press Enter to accept): Wide
+```
+
+### Troubleshooting
+- **Module Not Found**: Ensure all libraries are installed (`pip install ...`).
+- **API Errors**: Check internet connection; APIs may have rate limits.
+- **Invalid Ticker**: Use correct NSE tickers (e.g., `TCS.NS`).
+- **Data Gaps**: If data is missing, defaults are used; consider paid APIs for completeness.
+
+
