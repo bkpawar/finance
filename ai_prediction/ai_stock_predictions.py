@@ -8,6 +8,8 @@ from alpha_vantage.techindicators import TechIndicators
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import time
+import yfinance as yf
+from newsapi import NewsApiClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -29,7 +31,8 @@ class AIPredictor:
             self.tokenizer, self.model = None, None
 
     def fetch_technical_data(self, ticker):
-        """Fetch technical data using Alpha Vantage"""
+        """Fetch technical data using Alpha Vantage with yfinance fallback"""
+        # Try Alpha Vantage first
         try:
             ts = TimeSeries(key=self.alpha_vantage_key, output_format='pandas')
             ti = TechIndicators(key=self.alpha_vantage_key, output_format='pandas')
@@ -42,27 +45,36 @@ class AIPredictor:
                 'recent_low': data['3. low'].tail(30).min()  # 30-day low
             }
         except Exception as e:
-            logging.error(f"Error fetching technical data for {ticker}: {e}")
-            return {'sma200': 0, 'recent_low': 0}
+            logging.error(f"Error fetching technical data for {ticker} from Alpha Vantage: {e}")
+            # Fallback to yfinance
+            try:
+                stock = yf.Ticker(ticker)
+                hist = stock.history(period="6mo")  # Fetch 6 months for 200-day SMA
+                if len(hist) >= 200:
+                    sma200 = hist['Close'].rolling(window=200).mean().iloc[-1]
+                else:
+                    sma200 = hist['Close'].iloc[-1] * 0.97  # Fallback if insufficient data
+                recent_low = hist['Low'].tail(30).min()
+                logging.info(f"Successfully fetched technical data for {ticker} from yfinance")
+                return {
+                    'sma200': sma200,
+                    'recent_low': recent_low
+                }
+            except Exception as e2:
+                logging.error(f"Error fetching technical data for {ticker} from yfinance: {e2}")
+                return {'sma200': 0, 'recent_low': 0}
 
     def fetch_sentiment(self, ticker):
         """Fetch financial news sentiment using FinBERT"""
         if not self.tokenizer or not self.model:
             self.initialize_finbert()
         try:
-            # Mock news headlines (replace with real news API)
-            headlines = {
-                'NXPI': [
-                    "NXP Semiconductors reports strong Q4 2024 earnings but issues soft Q1 2025 guidance due to automotive demand.",
-                    "Semiconductor industry poised for rebound in 2025, boosting NXPI’s IoT and automotive segments.",
-                    "NXPI faces challenges in industrial IoT amid global supply chain constraints."
-                ],
-                'HDFCBANK.NS': [
-                    "HDFC Bank posts stable Q4 FY25 results with 2.2% YoY profit growth, maintaining strong asset quality.",
-                    "Indian banking sector expected to benefit from RBI’s rate stabilization, favoring HDFC Bank.",
-                    "HDFC Bank faces margin pressure due to rising deposit costs in FY25."
-                ]
-            }.get(ticker, ["Neutral news for stock analysis."])
+            # Placeholder for news headlines (replace with real news API)
+            newsapi = NewsApiClient(api_key='44470d3325744bd29fb3edb45c0e40db')
+            articles = newsapi.get_everything(q=ticker, language='en', sort_by='relevancy')
+            headlines = [article['title'] for article in articles['articles'][:3]] or [f"Neutral news for {ticker} analysis."]
+        
+            headlines = [f"Neutral news for {ticker} analysis."]  # Default neutral headline
             sentiments = []
             for headline in headlines:
                 inputs = self.tokenizer(headline, return_tensors="pt", truncation=True, max_length=512)
@@ -78,14 +90,10 @@ class AIPredictor:
             return "Neutral", 0.0
 
     def fetch_analyst_target(self, ticker, current_price):
-        """Fetch analyst price target (mocked, replace with scraping/API)"""
+        """Fetch analyst price target (placeholder, replace with real API/scraping)"""
         try:
-            # Mock targets based on previous data
-            targets = {
-                'NXPI': 263.52,  # Zacks, 27 analysts, April 2025
-                'HDFCBANK.NS': 2304.00  # ~20% upside from ₹1920, analyst consensus
-            }
-            target_price = targets.get(ticker, current_price * 1.2)
+            # Placeholder: Assume 20% upside as default target
+            target_price = current_price * 1.2
             return target_price
         except Exception as e:
             logging.error(f"Error fetching analyst target for {ticker}: {e}")
@@ -94,11 +102,37 @@ class AIPredictor:
     def calculate_ai_predictions(self, row):
         """Calculate detailed AI-driven predictions"""
         ticker = row['Ticker']
-        current_price = row['Current Price']
-        volatility = row['Volatility']
-        rsi = row['RSI']
-        composite_score = row['Composite Score']
-        de_ratio = row.get('D/E Ratio', 1.0)
+        current_price = row.get('Current Price', 0.0)
+        
+        # Convert numeric columns to float, handling potential string or non-numeric values
+        try:
+            volatility = float(row.get('Volatility', 0.2))
+        except (ValueError, TypeError):
+            logging.warning(f"Invalid Volatility for {ticker}. Using default 0.2.")
+            volatility = 0.2
+            
+        try:
+            rsi = float(row.get('14-Day RSI', 50.0))  # Use 14-Day RSI from input
+        except (ValueError, TypeError):
+            logging.warning(f"Invalid 14-Day RSI for {ticker}. Using default 50.0.")
+            rsi = 50.0
+            
+        try:
+            composite_score = float(row.get('Final Rating (0-100)', 0.0))  # Use Final Rating as Composite Score
+        except (ValueError, TypeError):
+            logging.warning(f"Invalid Final Rating for {ticker}. Using default 0.0.")
+            composite_score = 0.0
+            
+        try:
+            de_ratio = float(row.get('D/E Ratio', 1.0))
+        except (ValueError, TypeError):
+            logging.warning(f"Invalid D/E Ratio for {ticker}. Using default 1.0.")
+            de_ratio = 1.0
+
+        # Validate inputs
+        if current_price <= 0:
+            logging.warning(f"Invalid current price for {ticker}. Using default value.")
+            current_price = 100.0  # Default fallback
 
         # Fetch technical data
         tech_data = self.fetch_technical_data(ticker)
@@ -113,7 +147,7 @@ class AIPredictor:
 
         # Support Zone: Based on 200-day SMA and recent low
         support_low = min(sma200, recent_low, current_price * 0.97)
-        support_high = support_low + (5.0 if ticker == 'NXPI' else 50.0)  # $5 for NXPI, ₹50 for HDFCBANK
+        support_high = support_low + (5.0 if '.' not in ticker else 50.0)  # $5 for US stocks, ₹50 for Indian stocks
 
         # Buy Zone: Adjust support for volatility and RSI
         buy_low = support_low - (volatility * current_price * 0.1)
@@ -123,22 +157,20 @@ class AIPredictor:
         earnings_outlook = "Neutral"
         if sentiment_label == "Positive" and avg_sentiment > 0.2:
             earnings_outlook = "Positive"
-        elif sentiment_label == "Negative" or (ticker == 'NXPI' and avg_sentiment < 0.1):  # NXPI Q1 2025 softness
+        elif sentiment_label == "Negative" or avg_sentiment < -0.2:
             earnings_outlook = "Negative"
-        elif ticker == 'HDFCBANK.NS' and avg_sentiment > 0.1:
-            earnings_outlook = "Positive"  # Stable banking sector
 
         # Outlook and Detailed Rationale
         outlook = "Neutral"
         rationale = []
-        if composite_score > 10 and avg_sentiment > 0.1:
+        if composite_score > 60 and avg_sentiment > 0.1:
             outlook = "Bullish"
-            rationale.append(f"Strong Composite Score ({composite_score:.2f}) indicates robust momentum, supported by positive news sentiment ({sentiment_label}, {avg_sentiment:.2f}).")
-        elif composite_score < -5 or avg_sentiment < -0.2:
+            rationale.append(f"Strong Final Rating ({composite_score:.2f}/100) indicates robust momentum, supported by positive news sentiment ({sentiment_label}, {avg_sentiment:.2f}).")
+        elif composite_score < 40 or avg_sentiment < -0.2:
             outlook = "Bearish"
-            rationale.append(f"Weak Composite Score ({composite_score:.2f}) or negative news sentiment ({sentiment_label}, {avg_sentiment:.2f}) suggests caution.")
+            rationale.append(f"Weak Final Rating ({composite_score:.2f}/100) or negative news sentiment ({sentiment_label}, {avg_sentiment:.2f}) suggests caution.")
         else:
-            rationale.append(f"Balanced Composite Score ({composite_score:.2f}) and {sentiment_label} sentiment ({avg_sentiment:.2f}) suggest steady performance.")
+            rationale.append(f"Moderate Final Rating ({composite_score:.2f}/100) and {sentiment_label} sentiment ({avg_sentiment:.2f}) suggest steady performance.")
         if volatility > 0.25:
             rationale.append(f"Volatility Penalty Applied (Volatility: {volatility:.2%}), indicating higher risk.")
         if de_ratio > 2:
@@ -147,9 +179,9 @@ class AIPredictor:
             rationale.append(f"Low D/E Ratio ({de_ratio:.2f}) supports financial stability, enhancing investment appeal.")
         else:
             rationale.append(f"Moderate D/E Ratio ({de_ratio:.2f}) aligns with industry norms.")
-        rationale.append(f"Analyst Price Target: {'$' if ticker == 'NXPI' else '₹'}{target_price:.2f} suggests {((target_price/current_price)-1)*100:.2f}% upside.")
+        rationale.append(f"Analyst Price Target: {'$' if '.' not in ticker else '₹'}{target_price:.2f} suggests {((target_price/current_price)-1)*100:.2f}% upside.")
         rationale.append(f"Earnings Outlook: {earnings_outlook}, reflecting {sentiment_label.lower()} sentiment and recent performance trends.")
-        rationale.append(f"Support Zone ({'$' if ticker == 'NXPI' else '₹'}{support_low:.2f}-{support_high:.2f}) based on 200-day SMA and recent lows; Buy Zone ({'$' if ticker == 'NXPI' else '₹'}{buy_low:.2f}-{buy_high:.2f}) adjusted for volatility and RSI ({rsi:.2f}).")
+        rationale.append(f"Support Zone ({'$' if '.' not in ticker else '₹'}{support_low:.2f}-{support_high:.2f}) based on 200-day SMA and recent lows; Buy Zone ({'$' if '.' not in ticker else '₹'}{buy_low:.2f}-{buy_high:.2f}) adjusted for volatility and RSI ({rsi:.2f}).")
 
         return {
             'Ticker': ticker,
@@ -163,16 +195,68 @@ class AIPredictor:
             'Rationale': "; ".join(rationale)
         }
 
+def fetch_current_price(ticker):
+    """Fetch the current price of a stock using yfinance."""
+    try:
+        stock = yf.Ticker(ticker)
+        current_price = stock.history(period="1d")['Close'].iloc[-1]
+        logging.info(f"Fetched current price for {ticker}: {current_price}")
+        return current_price
+    except Exception as e:
+        logging.error(f"Error fetching current price for {ticker}: {e}")
+        return 0.0  # Default to 0.0 if fetching fails
+
 def process_ai_predictions(input_file, output_file):
     """Process AI predictions from portfolio_rankings.xlsx"""
     try:
         df = pd.read_excel(input_file)
+        logging.info(f"Columns in the input file: {df.columns}")
+        logging.info(f"First few rows of the input file:\n{df.head()}")
+
+        # Check for missing 'Current Price' column and fetch it if necessary
+        if 'Current Price' not in df.columns:
+            logging.warning("'Current Price' column is missing. Fetching prices using yfinance.")
+            df['Current Price'] = df['Ticker'].apply(fetch_current_price)
+
+        # Ensure other required columns exist
+        required_columns = ['Ticker', 'Current Price', 'Volatility', '14-Day RSI', 'Final Rating (0-100)', 'D/E Ratio']
+        for col in required_columns:
+            if col not in df.columns:
+                logging.warning(f"Missing required column: {col}. Filling with default values.")
+                df[col] = 0.0  # Default value for missing columns
+
+        # Convert numeric columns to float to avoid type issues
+        for col in ['Volatility', '14-Day RSI', 'Final Rating (0-100)', 'D/E Ratio']:
+            if col in df.columns:
+                try:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+                except Exception as e:
+                    logging.error(f"Error converting column {col} to numeric: {e}")
+                    df[col] = 0.0
+
         predictor = AIPredictor(alpha_vantage_key='LTEQWKD1G4LWCQTM')  # Replace with your key
         ai_results = []
 
+        # Process all tickers before writing output
         for _, row in df.iterrows():
-            ai_prediction = predictor.calculate_ai_predictions(row)
-            ai_results.append(ai_prediction)
+            try:
+                ticker = row['Ticker']
+                logging.info(f"Processing AI predictions for {ticker}")
+                ai_prediction = predictor.calculate_ai_predictions(row)
+                ai_results.append(ai_prediction)
+            except Exception as e:
+                logging.error(f"Error processing row for ticker {row.get('Ticker', 'Unknown')}: {e}")
+                ai_results.append({
+                    'Ticker': row.get('Ticker', 'Unknown'),
+                    'Support Zone Low': 0.0,
+                    'Support Zone High': 0.0,
+                    'Buy Range Low': 0.0,
+                    'Buy Range High': 0.0,
+                    'Target Price': 0.0,
+                    'Earnings Outlook': 'Error',
+                    'Outlook': 'Error',
+                    'Rationale': f'Error processing this row: {str(e)}'
+                })
 
         # Merge AI predictions with original data
         ai_df = pd.DataFrame(ai_results)
@@ -191,4 +275,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
